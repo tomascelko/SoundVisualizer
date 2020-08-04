@@ -83,7 +83,7 @@ namespace NoteVisualizer
     }
     class WavSoundReader : ISoundReader
     {
-        public int chunkSize = 8192 * 2  + 4; //used for reading bytes
+        public int chunkSize = 8192 *2  + 4; //used for reading bytes
         public ProcessedMetaData ReadHeader(BinaryReader reader)
         {
             //BinaryReader reader = new BinaryReader(waveFile);
@@ -212,16 +212,12 @@ namespace NoteVisualizer
 
         }
     }
-    class Tone
-    {
-
-    }
     class NoteDetector
     {
         const int range = 8;
-        Note[] baseNotes = { new NoteC(1), new NoteCSharp(1), new NoteD(1), new NoteDSharp(1),
-                         new NoteE(1), new NoteF(1), new NoteFSharp(1), new NoteG(1),
-                         new NoteGSharp(1), new NoteA(1), new NoteASharp(1), new NoteB(1)};
+        Note[] baseNotes = { new NoteC(1), new NoteCis(1), new NoteD(1), new NoteDis(1),
+                         new NoteE(1), new NoteF(1), new NoteFis(1), new NoteG(1),
+                         new NoteGis(1), new NoteA(1), new NoteAis(1), new NoteB(1)};
         public Note GetClosestNote(double freq)
         {
             double minDeltaFreq = int.MaxValue;
@@ -243,10 +239,50 @@ namespace NoteVisualizer
             return (closestNote);
         }
     }
+    interface INoteWriter
+    {
+        void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/);
+        void EndWrite();
+        void WriteNote(Note note);
+    }
+    class LillyPondNoteWriter : INoteWriter
+    {
+        private TextWriter writer;
+        public void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/)
+        {
+            writer.WriteLine("{");
+            this.writer = writer;
+        }
+        public void EndWrite()
+        {
+            writer.WriteLine();
+            writer.Write("}");
+            writer.Close();
+        }
+        public void WriteNote(Note note)
+        {
+            writer.Write(" {0}", NoteToString(note));
+        }
+        private string NoteToString(Note note)
+        {
+            string str = note.GetType().Name.ToLower().Substring(4);
+            int dashCount = note.number - 2;
+            for (int i = 0; i < dashCount; i++)
+            {
+                str += "'";
+            }
+            for (int i = 0; i < -dashCount; i++)
+            {
+                str += ",";
+            }
+            return str;
+        }
+    }
     #region Notes
+
     abstract class Note
     {
-        public int number;
+        public int number { get; set; }
         public readonly double baseFrequency;
         public int Length { get; set; }
         public Note ()
@@ -273,9 +309,9 @@ namespace NoteVisualizer
             this.Length = 1;
         }
     }
-    class NoteCSharp : Note
+    class NoteCis : Note
     {
-        public NoteCSharp(int number) : base(number, 34.65)
+        public NoteCis(int number) : base(number, 34.65)
         {
             this.Length = 1;
         }
@@ -287,9 +323,9 @@ namespace NoteVisualizer
             this.Length = 1;
         }
     }
-    class NoteDSharp : Note
+    class NoteDis : Note
     {
-        public NoteDSharp(int number) : base(number, 38.89)
+        public NoteDis(int number) : base(number, 38.89)
         {
             this.Length = 1;
         }
@@ -308,9 +344,9 @@ namespace NoteVisualizer
             this.Length = 1;
         }
     }
-    class NoteFSharp : Note
+    class NoteFis : Note
     {
-        public NoteFSharp(int number) : base(number, 46.25)
+        public NoteFis(int number) : base(number, 46.25)
         {
             this.Length = 1;
         }
@@ -322,9 +358,9 @@ namespace NoteVisualizer
             this.Length = 1;
         }
     }
-    class NoteGSharp : Note
+    class NoteGis : Note
     {
-        public NoteGSharp(int number) : base(number, 51.91)
+        public NoteGis(int number) : base(number, 51.91)
         {
             this.Length = 1;
         }
@@ -336,9 +372,9 @@ namespace NoteVisualizer
             this.Length = 1;
         }
     }
-    class NoteASharp : Note
+    class NoteAis : Note
     {
-        public NoteASharp(int number) : base(number, 58.27)
+        public NoteAis(int number) : base(number, 58.27)
         {
             this.Length = 1;
         }
@@ -353,6 +389,7 @@ namespace NoteVisualizer
     interface INoiseDetector
     {
         bool IsNoise(Complex[] buffer);
+        double CurrentAmplitude(Complex[] buffer);
     }
     class RMSNoiseDetector:INoiseDetector
     {
@@ -361,6 +398,7 @@ namespace NoteVisualizer
         {
             amplitudeThreshold = maxAmplitude / 10;
         }
+        public double CurrentAmplitude(Complex[] buffer) => CalculateRMSAmplitude(buffer); 
         public double CalculateRMSAmplitude(Complex[] buffer)
         {
             return Math.Sqrt(buffer.Sum(sample => sample.realPart * sample.realPart));
@@ -536,9 +574,14 @@ namespace NoteVisualizer
             Complex[] extendedComplexSamples = new Complex[2 * sampleArraySize - 2];
             
             IWindowFunction window = new HannWindowFunction();
-            int count = 0;
+            //int count = 0;
             byte[] byteValues = soundReader.ReadDataBuffer(dataStream, chunkSize + (metaData.channelsCount * metaData.bitDepth / 8));
+            
             StreamWriter writer = new StreamWriter("output.txt"); //temp
+            StreamWriter writer2 = new StreamWriter("output.ly");//temp
+            INoteWriter noteWriter = new LillyPondNoteWriter();
+            noteWriter.StartWrite(writer2);
+
             while (dataStream.Position < dataStream.Length - chunkSize)
             {
                 /*
@@ -561,7 +604,10 @@ namespace NoteVisualizer
                     double maxFreq = CalculateMaxFreq(maxFreqBin.binNumber, metaData, sampleArraySize);
                     NoteDetector noteDetector = new NoteDetector();
                     Note detectedNote = noteDetector.GetClosestNote(maxFreq / 2);
+
                     writer.WriteLine("{0} ; {1}", detectedNote.GetType().Name, detectedNote.number);
+
+                    noteWriter.WriteNote(detectedNote);
 
                     /*for (int i = 0; i < extendedComplexSamples.Length; i++)
                     {
@@ -571,10 +617,12 @@ namespace NoteVisualizer
                     }*/
                 }
                 writer.Flush();
+                writer2.Flush();
                 //writer.Close();
                 
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
             }
+            noteWriter.EndWrite();
             #endregion
         }
     }
