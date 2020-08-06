@@ -17,7 +17,7 @@ namespace NoteVisualizer
         public Form1()
         {
             InitializeComponent();
-            MainManager.ProcessSoundFile("clarinet2.wav");
+            MainManager.ProcessSoundFile("clarinet.wav");
         }
 
     }
@@ -26,6 +26,15 @@ namespace NoteVisualizer
         public static double Sqr(this double value)
         {
             return (value * value);
+        }
+        public static double GetNearest(this double value, double[] array)
+        {
+            double[] tempArray = new double[array.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                tempArray[i] = (value - array[i]).Sqr();
+            }
+            return array[Array.IndexOf(tempArray, tempArray.Min())];
         }
         public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance)
         {
@@ -258,6 +267,8 @@ namespace NoteVisualizer
     }
     class LillyPondNoteWriter : INoteWriter
     {
+        const int MaxNoteLength = 64;
+        const int MinNoteLength = 4;
         private TextWriter writer;
         public void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/)
         {
@@ -272,7 +283,7 @@ namespace NoteVisualizer
         }
         public void WriteNote(Note note)
         {
-            writer.Write(" {0}", NoteToString(note));
+            writer.Write(" {0}", NoteLengthToString(note));
         }
         public void WriteAll(MusicSample sample, TextWriter writer)
         {
@@ -283,10 +294,11 @@ namespace NoteVisualizer
             }
             EndWrite();
         }
-        private string NoteToString(Note note)
+        private string NoteLengthToString(Note note)
         {
+
             if (note.GetType() == typeof(Pause))
-                return "r";
+                return "r" + LengthToString(note);
             string str = note.GetType().Name.ToLower().Substring(4);
             int dashCount = note.number - 2;
             for (int i = 0; i < dashCount; i++)
@@ -297,7 +309,19 @@ namespace NoteVisualizer
             {
                 str += ",";
             }
-            return str;
+            return str + LengthToString(note);
+        }
+        private string LengthToString(Note note)
+        {
+            var position = Array.IndexOf(UniformNoteLengths.value, note.Length);
+            var lengthString = ((int)Math.Round(MaxNoteLength / UniformNoteLengths.value[position - (position % 2)])).ToString(); //getting the base length of a note
+            if (position % 2 == 1) //has odd position in noteLengths
+            {
+                lengthString += '.';
+            }
+            return lengthString;
+
+
         }
     }
     #region Notes
@@ -306,7 +330,7 @@ namespace NoteVisualizer
     {
         public int number { get; set; }
         public readonly double baseFrequency;
-        public int Length { get; set; }
+        public double Length { get; set; }
         public Note()
         { }
         public Note(int number, double baseFreq)
@@ -572,14 +596,58 @@ namespace NoteVisualizer
             return note3;
         }
     }
-    /*private void AddNoteFraction(Note note)
+    interface INoteLengthProcessor
+    {
+        void ProcessSample(MusicSample sample);
+    }
+    public static class UniformNoteLengths
+    { 
+        public static double[] value = { 4, 6, 8, 12, 16, 24, 32, 48, 64 };
+    }
+    class DefaultNoteLengthProcessor : INoteLengthProcessor
+    {
+        const int maxLength = 64;
+        const double frameSize = 1; //shortest measurable time frame
+        List<Note> newNotes = new List<Note>();
+        public DefaultNoteLengthProcessor()
         {
-            if (!(newNotes[newNotes.Count - 1]).Equals(note))
+            for (int i = 0; i < UniformNoteLengths.value.Length; i++)
+            {
+                UniformNoteLengths.value[i] *= frameSize;
+            }
+        }
+        public void ProcessSample(MusicSample sample)
+        {
+            SqueezeNotes(sample.Notes); //returns result to newNotes variable
+            AllignToNearestLength(); //returns result to newNotes variable -- reusing of existing List
+            sample.Notes = newNotes;
+        }
+        private void SqueezeNotes(List<Note> notes)
+        {
+            for (int i = 0; i < notes.Count; i++)
+            {
+                AddNoteFraction(notes[i]);
+            }
+        }
+        private void AddNoteFraction(Note note)
+        {
+            if (newNotes.Count == 0 || (!((newNotes[newNotes.Count - 1]) == note)  && newNotes[newNotes.Count - 1].Length < maxLength))
             {
                 newNotes.Add(note);
             }
-            else 
-        }*/
+            else
+            {
+                newNotes[newNotes.Count - 1].Length += note.Length;
+            }
+        }
+        private void AllignToNearestLength()
+        {
+            for (int i = 0; i < newNotes.Count; i++)
+            {
+                newNotes[i].Length = newNotes[i].Length.GetNearest(UniformNoteLengths.value);
+            }
+        }
+    }
     static class MainManager
     {
         const int HPSIterationsCount = 5;
@@ -723,8 +791,7 @@ namespace NoteVisualizer
             musicSample.Notes = new List<Note>();
 
             StreamWriter writer = new StreamWriter("output.txt"); //temp
-            StreamWriter writer2 = new StreamWriter("output.ly");//temp
-            INoteWriter noteWriter = new LillyPondNoteWriter();
+            
             //noteWriter.StartWrite(writer2);
 
             while (dataStream.Position < dataStream.Length - chunkSize)
@@ -772,6 +839,12 @@ namespace NoteVisualizer
             }
             IErrorCorrector corrector = new OverlapWindowCorrector();
             corrector.Correct(musicSample);
+
+            INoteLengthProcessor noteLengthProcessor = new DefaultNoteLengthProcessor();
+            noteLengthProcessor.ProcessSample(musicSample);
+
+            StreamWriter writer2 = new StreamWriter("output.ly");//temp
+            INoteWriter noteWriter = new LillyPondNoteWriter();
             noteWriter.WriteAll(musicSample, writer2);
             #endregion
         }
