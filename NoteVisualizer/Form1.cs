@@ -11,6 +11,7 @@ using System.Windows.Forms;
 
 namespace NoteVisualizer
 {
+    //unify chunksize
     public partial class Form1 : Form
     {
         public Form1()
@@ -218,6 +219,15 @@ namespace NoteVisualizer
         Note[] baseNotes = { new NoteC(1), new NoteCis(1), new NoteD(1), new NoteDis(1),
                          new NoteE(1), new NoteF(1), new NoteFis(1), new NoteG(1),
                          new NoteGis(1), new NoteA(1), new NoteAis(1), new NoteB(1)};
+        public List<Type> noteTypes { get; set; }
+        public NoteDetector()
+        {
+            noteTypes = new List<Type>();
+            foreach (Note note in baseNotes)
+            {
+                noteTypes.Add(note.GetType());
+            }
+        }
         public Note GetClosestNote(double freq)
         {
             double minDeltaFreq = int.MaxValue;
@@ -244,6 +254,7 @@ namespace NoteVisualizer
         void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/);
         void EndWrite();
         void WriteNote(Note note);
+        public void WriteAll(MusicSample sample, TextWriter writer);
     }
     class LillyPondNoteWriter : INoteWriter
     {
@@ -263,8 +274,19 @@ namespace NoteVisualizer
         {
             writer.Write(" {0}", NoteToString(note));
         }
+        public void WriteAll(MusicSample sample, TextWriter writer)
+        {
+            StartWrite(writer);
+            for (int i = 0; i < sample.Notes.Count; i++)
+            {
+                WriteNote(sample.Notes[i]);
+            }
+            EndWrite();
+        }
         private string NoteToString(Note note)
         {
+            if (note.GetType() == typeof(Pause))
+                return "r";
             string str = note.GetType().Name.ToLower().Substring(4);
             int dashCount = note.number - 2;
             for (int i = 0; i < dashCount; i++)
@@ -280,24 +302,72 @@ namespace NoteVisualizer
     }
     #region Notes
 
-    abstract class Note
+    abstract class Note : IComparable<Note>
     {
         public int number { get; set; }
         public readonly double baseFrequency;
         public int Length { get; set; }
-        public Note ()
-        {
-        }
+        public Note()
+        { }
         public Note(int number, double baseFreq)
         {
             this.number = number;
             this.baseFrequency = baseFreq;
         }
-
+        public override int GetHashCode()
+        {
+            var noteDet = new NoteDetector();
+            if (this is Pause)
+                return 0;
+            return noteDet.noteTypes.IndexOf(this.GetType()) * 100 + number + 1;
+        }
+        public override bool Equals(object obj)
+        {
+            return ((obj.GetType() == this.GetType() && ((Note)obj).number == this.number));
+        }
+        public static bool operator ==(Note note1, Note note2)
+        {
+            return note1.Equals(note2);
+        }
+        public static bool operator !=(Note note1, Note note2)
+        {
+            return !note1.Equals(note2);
+        }
+        public static bool operator <=(Note note1, Note note2)
+        {
+            var noteDet = new NoteDetector();
+            if (note1.GetType() == typeof(Pause) && note2.GetType() == typeof(Pause))
+                return true;
+            return (note2.number > note1.number || ((note2.number == note1.number) && noteDet.noteTypes.IndexOf(note2.GetType()) >= noteDet.noteTypes.IndexOf(note1.GetType())));
+        }
+        public static bool operator >=(Note note1, Note note2)
+        {
+            var noteDet = new NoteDetector();
+            return note1 == note2 || !(note1 <= note2);
+        }
+        public static bool operator <(Note note1, Note note2)
+        {
+            var noteDet = new NoteDetector();
+            return note1 <= note2 && note1 != note2;
+        }
+        public static bool operator >(Note note1, Note note2)
+        {
+            var noteDet = new NoteDetector();
+            return note1 >= note2 && note1 != note2;
+        }
+        public int CompareTo(Note note)
+        {
+            if (this == note)
+                return 0;
+            var noteDet = new NoteDetector();
+            if (this.number > note.number || ((this.number == note.number) && noteDet.noteTypes.IndexOf(this.GetType()) > noteDet.noteTypes.IndexOf(note.GetType())))
+                return 1;
+            return -1;
+        }
     }
     class Pause : Note
     {
-        public Pause()
+        public Pause() : base (0, 0)
         {
             this.Length = 1;
         }
@@ -437,7 +507,79 @@ namespace NoteVisualizer
             this.binNumber = binNumber;
             this.value = value;
         }
-    }    
+    }
+    interface IErrorCorrector
+    {
+        void Correct(MusicSample sample);
+    }
+    class OverlapWindowCorrector : IErrorCorrector 
+    {
+        List<Note> newNotes = new List<Note>();
+        public void Correct(MusicSample origSample)
+        {
+            for (int i = 0; i < origSample.Notes.Count - 2; i++)
+            {
+                newNotes.Add(MedianOfThree(origSample.Notes[i], origSample.Notes[i + 1], origSample.Notes[i + 2]));
+            }
+            origSample.Notes = newNotes;
+        }
+        private Note MedianOfThree(Note note1, Note note2, Note note3)
+        {
+            if (note1 > note2)
+            {
+                if (note2 >= note3)
+                    return note2;
+                else if (note1 < note3)
+                    return note1;
+            }
+            else
+            {
+                if (note2 < note3)
+                    return note2;
+                else if (note1 >= note3)
+                    return note1;
+            }
+            return note3;
+        }
+    }
+    class NoOverlapWindowCorrector : IErrorCorrector
+    {
+        List<Note> newNotes = new List<Note>();
+        public void Correct(MusicSample origSample)
+        {
+            for (int i = 0; i < origSample.Notes.Count - 2; i+=3)
+            {
+                newNotes.Add(MedianOfThree(origSample.Notes[i], origSample.Notes[i + 1], origSample.Notes[i + 2]));
+            }
+            origSample.Notes = newNotes;
+        }
+        private Note MedianOfThree(Note note1, Note note2, Note note3)
+        {
+            if (note1 > note2)
+            {
+                if (note2 >= note3)
+                    return note2;
+                else if (note1 < note3)
+                    return note1;
+            }
+            else
+            {
+                if (note2 < note3)
+                    return note2;
+                else if (note1 >= note3)
+                    return note1;
+            }
+            return note3;
+        }
+    }
+    /*private void AddNoteFraction(Note note)
+        {
+            if (!(newNotes[newNotes.Count - 1]).Equals(note))
+            {
+                newNotes.Add(note);
+            }
+            else 
+        }*/
     static class MainManager
     {
         const int HPSIterationsCount = 5;
@@ -574,31 +716,36 @@ namespace NoteVisualizer
             Complex[] extendedComplexSamples = new Complex[2 * sampleArraySize - 2];
             
             IWindowFunction window = new HannWindowFunction();
-            //int count = 0;
+
             byte[] byteValues = soundReader.ReadDataBuffer(dataStream, chunkSize + (metaData.channelsCount * metaData.bitDepth / 8));
-            
+
+            MusicSample musicSample = new MusicSample(metaData, inputFilePath);
+            musicSample.Notes = new List<Note>();
+
             StreamWriter writer = new StreamWriter("output.txt"); //temp
             StreamWriter writer2 = new StreamWriter("output.ly");//temp
             INoteWriter noteWriter = new LillyPondNoteWriter();
-            noteWriter.StartWrite(writer2);
+            //noteWriter.StartWrite(writer2);
 
             while (dataStream.Position < dataStream.Length - chunkSize)
             {
-                /*
-                count++;
-                if (count == 1000)
-                {
-
-                }*/
+                
                 complexSamples = GetComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, true), metaData.bitDepth, metaData.channelsCount);
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
+                {
                     writer.WriteLine("Pause");
-                else {
+                    Note detectedNote = new Pause();
+                    //noteWriter.WriteNote(detectedNote);
+
+                    musicSample.Notes.Add(detectedNote);
+                }
+                else
+                {
                     extendedComplexSamples = ExtendSamples(complexSamples);
-                    //window.Windowify(extendedComplexSamples);
+                    window.Windowify(extendedComplexSamples);
                     extendedComplexSamples = extendedComplexSamples.MakeFFT(extendedComplexSamples.Length, 0, 1);
-                    //extendedComplexSamples = extendedComplexSamples.MakeHPS(HPSIterationsCount);
+                    extendedComplexSamples = extendedComplexSamples.MakeHPS(HPSIterationsCount);
                     //StreamWriter writer = new StreamWriter("output.txt");
                     MaxFreqBin maxFreqBin = GetMaxFreqBin(extendedComplexSamples);
                     double maxFreq = CalculateMaxFreq(maxFreqBin.binNumber, metaData, sampleArraySize);
@@ -607,22 +754,25 @@ namespace NoteVisualizer
 
                     writer.WriteLine("{0} ; {1}", detectedNote.GetType().Name, detectedNote.number);
 
-                    noteWriter.WriteNote(detectedNote);
+                    //noteWriter.WriteNote(detectedNote);
 
+                    musicSample.Notes.Add(detectedNote);
                     /*for (int i = 0; i < extendedComplexSamples.Length; i++)
                     {
-                        writer.Write("{0} ", i);
-                        writer.Write("{0} ", extendedComplexSamples[i].realPart / extendedComplexSamples.Length);
-                        writer.WriteLine("{0} ", extendedComplexSamples[i].imaginaryPart / extendedComplexSamples.Length);
+                        writer3.Write("{0} ", i);
+                        writer3.Write("{0} ", extendedComplexSamples[i].realPart / extendedComplexSamples.Length);
+                        writer3.WriteLine("{0} ", extendedComplexSamples[i].imaginaryPart / extendedComplexSamples.Length);
                     }*/
                 }
                 writer.Flush();
-                writer2.Flush();
+                //writer2.Flush();
                 //writer.Close();
                 
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
             }
-            noteWriter.EndWrite();
+            IErrorCorrector corrector = new OverlapWindowCorrector();
+            corrector.Correct(musicSample);
+            noteWriter.WriteAll(musicSample, writer2);
             #endregion
         }
     }
