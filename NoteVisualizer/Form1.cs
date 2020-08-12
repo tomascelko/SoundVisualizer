@@ -8,18 +8,52 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Windows.Forms;
+using System.Threading;
 
 namespace NoteVisualizer
 {
     //unify chunksize
-    public partial class Form1 : Form
+    public partial class SoundVisualizer : Form
     {
-        public Form1()
+        public SoundVisualizer()
         {
             InitializeComponent();
-            MainManager.ProcessSoundFile("clarinet.wav");
+        }
+        public void SetProgressBar()
+        {
+            progressBar.Value = (int)Math.Round(MainManager.Progress * 100);
+        }
+        private void browseButtonClick(object sender, EventArgs e)
+        {
+            var FD = new System.Windows.Forms.OpenFileDialog();
+            if (FD.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                inputSampleTextBox.Text = FD.FileName;
+            }
         }
 
+        public void Done()
+        {
+            MessageBox.Show("You can now view processed file by clicking \"View\"", "Successfully Done");
+        }
+        
+        private void processButtonClicked(object sender, EventArgs e)
+        {
+            progressBar.Maximum = 100;
+
+            BaseFrequencies.TransposeDown(2);
+            MainManager.ProcessSoundFile(inputSampleTextBox.Text, outputTextBox.Text, this);
+        }
+        private void viewResultClicked(object sender, EventArgs e)
+        { 
+        
+        }
+        private void label1_Click(object sender, EventArgs e)
+        {
+        }
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+        }
     }
     static class Extensions
     {
@@ -36,12 +70,29 @@ namespace NoteVisualizer
             }
             return array[Array.IndexOf(tempArray, tempArray.Min())];
         }
-        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance)
+        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance) //parallelized
         {
+            const int minSize = 256;
             if (size > 1)
             {
-                Complex[] even = MakeFFT(input, size / 2, startingIndex, distance * 2);
-                Complex[] odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);
+                Complex[] even = new Complex[size / 2];
+                Complex[] odd = new Complex[size / 2];
+                if (size > minSize)
+                {
+
+                    Task task = new Task(() => { even = MakeFFT(input, size / 2, startingIndex, distance * 2); });
+                    task.Start();
+
+                    //Complex[] even = MakeFFT(input, size / 2, startingIndex, distance * 2);
+                    odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);                  
+                    task.Wait();
+                }
+                else
+                {
+                    even = MakeFFT(input, size / 2, startingIndex, distance * 2);
+                    odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);
+                    
+                }
                 Complex[] output = new Complex[even.Length + odd.Length];
                 double angleOfOmega = 2 * Math.PI / size;
                 for (int i = 0; i < even.Length; i++)
@@ -269,6 +320,8 @@ namespace NoteVisualizer
     {
         const int MaxNoteLength = 64;
         const int MinNoteLength = 4;
+        int NotesOnLine { get; set; }
+        const int MaxNotesOnLine = 30; 
         private TextWriter writer;
         public void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/)
         {
@@ -283,18 +336,29 @@ namespace NoteVisualizer
         }
         public void WriteNote(Note note)
         {
-            writer.Write(" {0}", NoteLengthToString(note));
+            writer.Write(" {0}", NoteToString(note));
+            NotesOnLine++;
+        }
+        public void WriteBreak()
+        {
+            writer.Write(" \\bar \"\" \\break");
         }
         public void WriteAll(MusicSample sample, TextWriter writer)
         {
             StartWrite(writer);
             for (int i = 0; i < sample.Notes.Count; i++)
             {
+                if (NotesOnLine == 30)
+                {
+                    WriteBreak();
+                    NotesOnLine = 0;
+                }
+
                 WriteNote(sample.Notes[i]);
             }
             EndWrite();
         }
-        private string NoteLengthToString(Note note)
+        private string NoteToString(Note note)
         {
 
             if (note.GetType() == typeof(Pause))
@@ -323,6 +387,62 @@ namespace NoteVisualizer
 
 
         }
+    }
+    static class BaseFrequencies
+    {
+        public static List<NoteBaseFrequencyPair> GetBaseFreq = new List<NoteBaseFrequencyPair>();
+        static BaseFrequencies()
+        {
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteC).Name, 32.70));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteCis).Name, 34.65));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteD).Name, 36.71));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteDis).Name, 38.89));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteE).Name, 41.20));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteF).Name, 43.65));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteFis).Name, 46.25));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteG).Name, 49.00));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteGis).Name, 51.91));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteA).Name, 55.00));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteAis).Name, 58.27));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteB).Name, 61.74));
+        }
+        public static void TransposeUp(int count)
+        {
+            if (count == 0)
+                return;
+            var firstFreq = GetBaseFreq[0].BaseFreq;
+            for (int i = 0; i < GetBaseFreq.Count - 1; i++)
+            {
+                GetBaseFreq[i].BaseFreq = GetBaseFreq[i + 1].BaseFreq;
+            }
+            GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq = 2 * firstFreq;
+            TransposeUp(count - 1);              
+        }
+        public static void TransposeDown(int count) //TOCheck
+        {
+            if (count == 0)
+                return;
+            var lastFreq = GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq;
+
+            for (int i = GetBaseFreq.Count - 1; i > 0; i--)
+            {
+                GetBaseFreq[i].BaseFreq = GetBaseFreq[i - 1].BaseFreq;
+            }
+            GetBaseFreq[0].BaseFreq = lastFreq / 2;
+            TransposeDown(count - 1);
+        }
+
+    }
+    class NoteBaseFrequencyPair
+    {
+        public string Note { get; set; }
+        public double BaseFreq;
+        public NoteBaseFrequencyPair(string Note, double BaseFreq)
+        {
+            this.Note = Note;
+            this.BaseFreq = BaseFreq;
+        }
+       
     }
     #region Notes
 
@@ -389,6 +509,7 @@ namespace NoteVisualizer
             return -1;
         }
     }
+ 
     class Pause : Note
     {
         public Pause() : base (0, 0)
@@ -398,110 +519,86 @@ namespace NoteVisualizer
     }
     class NoteC : Note
     {
-        public NoteC(int number) : base(number, 32.70)
+        public NoteC(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteC).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteCis : Note
     {
-        public NoteCis(int number) : base(number, 34.65)
+        public NoteCis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteCis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteD : Note
     {
-        public NoteD(int number) : base(number, 36.71)
+        public NoteD(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteD).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteDis : Note
     {
-        public NoteDis(int number) : base(number, 38.89)
+        public NoteDis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteDis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteE : Note
     {
-        public NoteE(int number) : base(number, 41.20)
+        public NoteE(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteE).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteF : Note
     {
-        public NoteF(int number) : base(number, 43.65)
+        public NoteF(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteF).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteFis : Note
     {
-        public NoteFis(int number) : base(number, 46.25)
+        public NoteFis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteFis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteG : Note
     {
-        public NoteG(int number) : base(number, 49.00)
+        public NoteG(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteG).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteGis : Note
     {
-        public NoteGis(int number) : base(number, 51.91)
+        public NoteGis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteGis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteA : Note
     {
-        public NoteA(int number) : base(number, 55.00)
+        public NoteA(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteA).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteAis : Note
     {
-        public NoteAis(int number) : base(number, 58.27)
+        public NoteAis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteAis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteB : Note
     {
-        public NoteB(int number) : base(number, 61.74)
+        public NoteB(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteB).Name).BaseFreq)
         {
             this.Length = 1;
-        }
-    }
-    interface INoiseDetector
-    {
-        bool IsNoise(Complex[] buffer);
-        double CurrentAmplitude(Complex[] buffer);
-    }
-    class RMSNoiseDetector:INoiseDetector
-    {
-        readonly double amplitudeThreshold;
-        public RMSNoiseDetector(double maxAmplitude)
-        {
-            amplitudeThreshold = maxAmplitude / 10;
-        }
-        public double CurrentAmplitude(Complex[] buffer) => CalculateRMSAmplitude(buffer); 
-        public double CalculateRMSAmplitude(Complex[] buffer)
-        {
-            return Math.Sqrt(buffer.Sum(sample => sample.realPart * sample.realPart));
-        }
-        public bool IsNoise(Complex[] buffer)
-        {
-            if (CalculateRMSAmplitude(buffer) < amplitudeThreshold)
-                return true;
-            return false;
         }
     }
     class MusicSample
@@ -516,7 +613,31 @@ namespace NoteVisualizer
         }
 
     }
-    #endregion 
+    #endregion
+    interface INoiseDetector
+    {
+        bool IsNoise(Complex[] buffer);
+        double CurrentAmplitude(Complex[] buffer);
+    }
+    class RMSNoiseDetector : INoiseDetector
+    {
+        readonly double amplitudeThreshold;
+        public RMSNoiseDetector(double maxAmplitude)
+        {
+            amplitudeThreshold = maxAmplitude / 8;
+        }
+        public double CurrentAmplitude(Complex[] buffer) => CalculateRMSAmplitude(buffer);
+        public double CalculateRMSAmplitude(Complex[] buffer)
+        {
+            return Math.Sqrt(buffer.Sum(sample => sample.realPart * sample.realPart));
+        }
+        public bool IsNoise(Complex[] buffer)
+        {
+            if (CalculateRMSAmplitude(buffer) < amplitudeThreshold)
+                return true;
+            return false;
+        }
+    }
     struct MaxFreqBin
     {
         public int binNumber { get; private set; }
@@ -600,9 +721,9 @@ namespace NoteVisualizer
     {
         void ProcessSample(MusicSample sample);
     }
-    public static class UniformNoteLengths
+    internal static class UniformNoteLengths
     { 
-        public static double[] value = { 4, 6, 8, 12, 16, 24, 32, 48, 64 };
+        internal static double[] value = { 4, 6, 8, 12, 16, 24, 32, 48, 64 };
     }
     class DefaultNoteLengthProcessor : INoteLengthProcessor
     {
@@ -644,13 +765,17 @@ namespace NoteVisualizer
         {
             for (int i = 0; i < newNotes.Count; i++)
             {
-                newNotes[i].Length = newNotes[i].Length.GetNearest(UniformNoteLengths.value);
+                if (newNotes[i].Length > 1) //skipping notes of length 1 as they are probably errors
+                    newNotes[i].Length = newNotes[i].Length.GetNearest(UniformNoteLengths.value);
+                else
+                    newNotes.RemoveAt(i);
             }
         }
     }
     static class MainManager
     {
         const int HPSIterationsCount = 5;
+        public static double Progress { get; private set; }
         static int chunkSize {get; set;} = 8192 * 2 ; //used for FFT, change so the chunksize is always constant in terms of number of real numbers, not bytes
                                                     //adjust chunksize accordint to metadata
         static int sampleArraySize { get; set; } 
@@ -763,7 +888,7 @@ namespace NoteVisualizer
             }
             return (singleChannel);
         }
-        static internal void ProcessSoundFile(string inputFilePath) // ---> Main
+        static internal void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form) // ---> Main
         {
 
             #region processing header
@@ -791,12 +916,12 @@ namespace NoteVisualizer
             musicSample.Notes = new List<Note>();
 
             StreamWriter writer = new StreamWriter("output.txt"); //temp
-            
+
             //noteWriter.StartWrite(writer2);
 
             while (dataStream.Position < dataStream.Length - chunkSize)
             {
-                
+
                 complexSamples = GetComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, true), metaData.bitDepth, metaData.channelsCount);
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
@@ -834,8 +959,11 @@ namespace NoteVisualizer
                 writer.Flush();
                 //writer2.Flush();
                 //writer.Close();
-                
+
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
+                Progress = Math.Min(((double)dataStream.Position) / (dataStream.Length - chunkSize), 1);
+                form.SetProgressBar();
+                
             }
             IErrorCorrector corrector = new OverlapWindowCorrector();
             corrector.Correct(musicSample);
@@ -843,9 +971,10 @@ namespace NoteVisualizer
             INoteLengthProcessor noteLengthProcessor = new DefaultNoteLengthProcessor();
             noteLengthProcessor.ProcessSample(musicSample);
 
-            StreamWriter writer2 = new StreamWriter("output.ly");//temp
+            StreamWriter writer2 = new StreamWriter(outputFileName + ".ly");
             INoteWriter noteWriter = new LillyPondNoteWriter();
             noteWriter.WriteAll(musicSample, writer2);
+            form.Done();
             #endregion
         }
     }
