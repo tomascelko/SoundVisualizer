@@ -6,13 +6,4 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Reference Include="NAudio">
-      <HintPath>bin\Debug\netcoreapp3.0\NAudio.dll</HintPath>
-    </Reference>
-    <Reference Include="NSpeex">
-      <HintPath>bin\Debug\netcoreapp3.0\NSpeex.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
 </Project>

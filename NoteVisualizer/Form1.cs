@@ -9,6 +9,9 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Windows.Forms;
 using System.Threading;
+using System.Runtime.CompilerServices;
+
+[assembly : InternalsVisibleTo("UnitTestSoundVisualizer")]
 
 namespace NoteVisualizer
 {
@@ -83,7 +86,6 @@ namespace NoteVisualizer
                     Task task = new Task(() => { even = MakeFFT(input, size / 2, startingIndex, distance * 2); });
                     task.Start();
 
-                    //Complex[] even = MakeFFT(input, size / 2, startingIndex, distance * 2);
                     odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);                  
                     task.Wait();
                 }
@@ -205,6 +207,7 @@ namespace NoteVisualizer
     }
     struct Complex
     {
+
         public double realPart { get; set; }
         public double imaginaryPart { get; set; }
         public Complex(double realPart, double imaginaryPart)
