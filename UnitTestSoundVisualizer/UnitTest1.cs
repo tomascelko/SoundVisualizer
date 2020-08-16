@@ -127,4 +127,57 @@ namespace UnitTestSoundVisualizer
             Assert.IsTrue(ComplexComparer.AreEqual(result, expected));
         }
     }
+    [TestClass]
+    public class NoteDetectorTest
+    { 
+        [TestMethod]
+        public void TestBaseA()
+        {
+            //Arrange
+            var detector = new NoteDetector();
+            const double testFrequency = 440;
+            var expected = new NoteA(3);
+            //Act
+            var result = detector.GetClosestNote(testFrequency);
+            //Assert
+            Assert.IsTrue(result == expected);
+        }
+        [TestMethod]
+        public void TestTransposedA()
+        {
+            //Arrange
+            NoteDetector.TransposeDown(2);
+            var detector = new NoteDetector();
+            const double testFrequency = 440;
+            var expected = new NoteB(3);
+            //Act
+            var result = detector.GetClosestNote(testFrequency);
+            //Assert
+            Assert.IsTrue(result == expected);
+        }
+        [TestMethod]
+        public void TestMinC()
+        {
+            //Arrange
+            var detector = new NoteDetector();
+            const double testFrequency = 30;
+            var expected = new NoteC(1);
+            //Act
+            var result = detector.GetClosestNote(testFrequency);
+            //Assert
+            Assert.IsTrue(result == expected);
+        }
+        [TestMethod]
+        public void TestMaxC()
+        {
+            //Arrange
+            var detector = new NoteDetector();
+            const double testFrequency = 4185;
+            var expected = new NoteC(7);
+            //Act
+            var result = detector.GetClosestNote(testFrequency);
+            //Assert
+            Assert.IsTrue(result == expected);
+        }
+    }
 }

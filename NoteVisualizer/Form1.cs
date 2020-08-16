@@ -15,8 +15,10 @@ using System.Runtime.CompilerServices;
 
 namespace NoteVisualizer
 {
-    //unify chunksize
-    public partial class SoundVisualizer : Form
+    /// <summary>
+    /// Graphical User interface of the whole application
+    /// </summary>
+    public partial class SoundVisualizer : Form 
     {
         public SoundVisualizer()
         {
@@ -26,6 +28,11 @@ namespace NoteVisualizer
         {
             progressBar.Value = (int)Math.Round(MainManager.Progress * 100);
         }
+        /// <summary>
+        /// Event Handler for clicking the browse button which opens dialog
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void browseButtonClick(object sender, EventArgs e)
         {
             var FD = new System.Windows.Forms.OpenFileDialog();
@@ -34,17 +41,20 @@ namespace NoteVisualizer
                 inputSampleTextBox.Text = FD.FileName;
             }
         }
-
         public void Done()
         {
             MessageBox.Show("You can now view processed file by clicking \"View\"", "Successfully Done");
         }
-        
+        /// <summary>
+        /// Starts processing of given text file selected in inputTextBox
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void processButtonClicked(object sender, EventArgs e)
         {
             progressBar.Maximum = 100;
 
-            BaseFrequencies.TransposeDown(2);
+            //NoteDetector.TransposeDown(2);
             MainManager.ProcessSoundFile(inputSampleTextBox.Text, outputTextBox.Text, this);
         }
         private void viewResultClicked(object sender, EventArgs e)
@@ -73,7 +83,15 @@ namespace NoteVisualizer
             }
             return array[Array.IndexOf(tempArray, tempArray.Min())];
         }
-        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance) //parallelized
+        /// <summary>
+        /// Paralelized Fast fourier transform given data
+        /// </summary>
+        /// <param name="input">data to transform</param>
+        /// <param name="size">data count</param>
+        /// <param name="startingIndex">index where to start FFT - called from outside with 0</param>
+        /// <param name="distance">determines how many indices we need to skip in original array to get to next valid element (in this call)</param>
+        /// <returns>array of complex values after FFT</returns>
+        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance) 
         {
             const int minSize = 256;
             if (size > 1)
@@ -118,6 +136,18 @@ namespace NoteVisualizer
                 return (output);
             }
         }
+        /// <summary>
+        /// Wrapping method to hide needed recursion parameters and set their initial value
+        /// </summary>
+        /// <param name="input">array to transform</param>
+        /// <returns></returns>
+        public static Complex[] MakeFFT(this Complex[] input) => input.MakeFFT(input.Length, 0, 1);
+        /// <summary>
+        /// Calculates Harmonic product spectrum of buffer on input to reduce chance of "octava - error"
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="iterationsCount">HPS is usually computed iteratively to reduce "octava - error" even more</param>
+        /// <returns></returns>
         public static Complex[] MakeHPS(this Complex[] input, int iterationsCount)
         {
             Complex[] output = new Complex[input.Length];
@@ -140,16 +170,32 @@ namespace NoteVisualizer
     }
     interface ISoundReader
     {
+        /// <summary>
+        /// Reads input file header and creates Processed MetaData object with all inportant attributes for further processing
+        /// </summary>
+        /// <param name="waveFile"></param>
+        /// <returns></returns>
         ProcessedMetaData ReadHeader(BinaryReader waveFile);
+        /// <summary>
+        /// Serves as initial read from the file into the buffer
+        /// </summary>
+        /// <param name="waveFile"></param>
+        /// <param name="byteCount">number of bytes to read</param>
+        /// <returns></returns>
+
         byte[] ReadDataBuffer(FileStream waveFile, int byteCount);
+        /// <summary>
+        /// "Moves" the data buffer by the distance parameter - buffer is only a window through which we look at the data stream (also reuses the same buffer object to save memory and time)
+        /// </summary>
+        /// <param name="waveFile"></param>
+        /// <param name="distance">Number of bytes by which the buffer is "moved"</param>
+        /// <param name="dataBuffer"></param>
         void MoveDataBuffer(FileStream waveFile, int distance, byte[] dataBuffer);
     }
     class WavSoundReader : ISoundReader
     {
-        public int chunkSize = 8192 *2  + 4; //used for reading bytes
         public ProcessedMetaData ReadHeader(BinaryReader reader)
         {
-            //BinaryReader reader = new BinaryReader(waveFile);
 
             //Read the wave file header from the buffer. 
             int headerSize = 0;
@@ -205,9 +251,11 @@ namespace NoteVisualizer
         }
 
     }
+    /// <summary>
+    /// A simple struct which represents complex number with its properties
+    /// </summary>
     struct Complex
     {
-
         public double realPart { get; set; }
         public double imaginaryPart { get; set; }
         public Complex(double realPart, double imaginaryPart)
@@ -216,6 +264,9 @@ namespace NoteVisualizer
             this.imaginaryPart = imaginaryPart;
         }
     }
+    /// <summary>
+    /// Holds all necessary data about the music sample for further processing
+    /// </summary>
     class ProcessedMetaData
     {
         public readonly int headerSize;
@@ -232,10 +283,27 @@ namespace NoteVisualizer
     }
     interface IWindowFunction
     {
+        /// <summary>
+        /// number of bytes by which the windows should overlap
+        /// </summary>
         int OverlapSize { get; }
+        /// <summary>
+        /// Applies Window function to the buffer - used to reduce "alligned error"
+        /// </summary>
+        /// <param name="samples"></param>
         void Windowify(Complex[] samples);
+        /// <summary>
+        /// Applies the window function to the specific sample in the buffer
+        /// </summary>
+        /// <param name="sample">sample to transform</param>
+        /// <param name="sampleIndex"></param>
+        /// <param name="sampleCount">count of all samples in a buffer</param>
+        /// <returns></returns>
         Complex Calculate(Complex sample, int sampleIndex, int sampleCount);
     }
+    /// <summary>
+    /// Most frequently used window function to reduce "allign error"
+    /// </summary>
     class HannWindowFunction : IWindowFunction
     {
         public int OverlapSize => 4096; //in bytes
@@ -254,6 +322,9 @@ namespace NoteVisualizer
 
         }
     }
+    /// <summary>
+    /// steeper window function - Reduces "allign error" more effectively but lowers frequency resolution
+    /// </summary>
     class NuttalWindowFunction : IWindowFunction
     {
         public int OverlapSize => 1024; //in bytes
@@ -276,13 +347,83 @@ namespace NoteVisualizer
 
         }
     }
+    /// <summary>
+    /// object used to find the closest Note to the given frequency and Transposition chosen by the user
+    /// </summary>
     class NoteDetector
     {
         const int range = 8;
+        /// <summary>
+        /// Used as implementation detail of finding the closest note
+        /// </summary>
         Note[] baseNotes = { new NoteC(1), new NoteCis(1), new NoteD(1), new NoteDis(1),
                          new NoteE(1), new NoteF(1), new NoteFis(1), new NoteG(1),
                          new NoteGis(1), new NoteA(1), new NoteAis(1), new NoteB(1)};
-        public List<Type> noteTypes { get; set; }
+        /// <summary>
+        /// List ( not dictionary because we need to enumerate in order) that contains key and value pairs to find base frequency based on the note Type when creating new note of give type
+        /// </summary>
+        public static List<NoteBaseFrequencyPair> GetBaseFreq = new List<NoteBaseFrequencyPair>();
+        public static int CurrentTranspo{ get; set; }
+        static NoteDetector()
+        {
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteC).Name, 32.70));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteCis).Name, 34.65));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteD).Name, 36.71));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteDis).Name, 38.89));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteE).Name, 41.20));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteF).Name, 43.65));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteFis).Name, 46.25));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteG).Name, 49.00));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteGis).Name, 51.91));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteA).Name, 55.00));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteAis).Name, 58.27));
+            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteB).Name, 61.74));
+            CurrentTranspo = 0;
+        }
+        /// <summary>
+        /// Changes GetBaseFreq to reflect tuning of different instruments
+        /// Must be called BEFORE noteDetector object is created
+        /// </summary>
+        /// <param name="count">number of Half-tones to transpose</param>
+        public static void TransposeUp(int count)
+        {
+            if (count == 0)
+                return;
+            var firstFreq = GetBaseFreq[0].BaseFreq;
+            for (int i = 0; i < GetBaseFreq.Count - 1; i++)
+            {
+                GetBaseFreq[i].BaseFreq = GetBaseFreq[i + 1].BaseFreq;
+            }
+            GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq = 2 * firstFreq;
+            CurrentTranspo++;
+            TransposeUp(count - 1);
+        }
+        /// <summary>
+        /// Changes GetBaseFreq to reflect tuning of different instruments
+        /// Must be called BEFORE noteDetector object is created
+        /// </summary>
+        /// <param name="count">number of Half-tones to transpose </param>
+        public static void TransposeDown(int count) //TOCheck
+        {
+            if (count == 0)
+                return;
+            var lastFreq = GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq;
+
+            for (int i = GetBaseFreq.Count - 1; i > 0; i--)
+            {
+                GetBaseFreq[i].BaseFreq = GetBaseFreq[i - 1].BaseFreq;
+            }
+            GetBaseFreq[0].BaseFreq = lastFreq / 2;
+            CurrentTranspo--;
+            TransposeDown(count - 1);
+        }
+        /// <summary>
+        /// List that determines the order of notes in a scale
+        /// </summary>
+        public List<Type> noteTypes { get; private set; }
+        /// <summary>
+        /// initializes order of notes in a scale
+        /// </summary>
         public NoteDetector()
         {
             noteTypes = new List<Type>();
@@ -312,9 +453,12 @@ namespace NoteVisualizer
             return (closestNote);
         }
     }
+    /// <summary>
+    /// Writes notes to the given file base on the output format
+    /// </summary>
     interface INoteWriter
     {
-        void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/);
+        void StartWrite(TextWriter writer);
         void EndWrite();
         void WriteNote(Note note);
         public void WriteAll(MusicSample sample, TextWriter writer);
@@ -351,7 +495,7 @@ namespace NoteVisualizer
             StartWrite(writer);
             for (int i = 0; i < sample.Notes.Count; i++)
             {
-                if (NotesOnLine == 30)
+                if (NotesOnLine == MaxNotesOnLine)
                 {
                     WriteBreak();
                     NotesOnLine = 0;
@@ -382,7 +526,7 @@ namespace NoteVisualizer
         {
             var position = Array.IndexOf(UniformNoteLengths.value, note.Length);
             var lengthString = ((int)Math.Round(MaxNoteLength / UniformNoteLengths.value[position - (position % 2)])).ToString(); //getting the base length of a note
-            if (position % 2 == 1) //has odd position in noteLengths
+            if (position % 2 == 1) //has odd position in noteLengths means dot is needed
             {
                 lengthString += '.';
             }
@@ -391,51 +535,7 @@ namespace NoteVisualizer
 
         }
     }
-    static class BaseFrequencies
-    {
-        public static List<NoteBaseFrequencyPair> GetBaseFreq = new List<NoteBaseFrequencyPair>();
-        static BaseFrequencies()
-        {
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteC).Name, 32.70));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteCis).Name, 34.65));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteD).Name, 36.71));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteDis).Name, 38.89));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteE).Name, 41.20));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteF).Name, 43.65));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteFis).Name, 46.25));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteG).Name, 49.00));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteGis).Name, 51.91));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteA).Name, 55.00));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteAis).Name, 58.27));
-            GetBaseFreq.Add(new NoteBaseFrequencyPair(typeof(NoteB).Name, 61.74));
-        }
-        public static void TransposeUp(int count)
-        {
-            if (count == 0)
-                return;
-            var firstFreq = GetBaseFreq[0].BaseFreq;
-            for (int i = 0; i < GetBaseFreq.Count - 1; i++)
-            {
-                GetBaseFreq[i].BaseFreq = GetBaseFreq[i + 1].BaseFreq;
-            }
-            GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq = 2 * firstFreq;
-            TransposeUp(count - 1);              
-        }
-        public static void TransposeDown(int count) //TOCheck
-        {
-            if (count == 0)
-                return;
-            var lastFreq = GetBaseFreq[GetBaseFreq.Count - 1].BaseFreq;
-
-            for (int i = GetBaseFreq.Count - 1; i > 0; i--)
-            {
-                GetBaseFreq[i].BaseFreq = GetBaseFreq[i - 1].BaseFreq;
-            }
-            GetBaseFreq[0].BaseFreq = lastFreq / 2;
-            TransposeDown(count - 1);
-        }
-
-    }
+    
     class NoteBaseFrequencyPair
     {
         public string Note { get; set; }
@@ -448,7 +548,9 @@ namespace NoteVisualizer
        
     }
     #region Notes
-
+    /// <summary>
+    /// class with default implementation of methods for all notes
+    /// </summary>
     abstract class Note : IComparable<Note>
     {
         public int number { get; set; }
@@ -522,84 +624,84 @@ namespace NoteVisualizer
     }
     class NoteC : Note
     {
-        public NoteC(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteC).Name).BaseFreq)
+        public NoteC(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteC).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteCis : Note
     {
-        public NoteCis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteCis).Name).BaseFreq)
+        public NoteCis(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteCis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteD : Note
     {
-        public NoteD(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteD).Name).BaseFreq)
+        public NoteD(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteD).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteDis : Note
     {
-        public NoteDis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteDis).Name).BaseFreq)
+        public NoteDis(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteDis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteE : Note
     {
-        public NoteE(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteE).Name).BaseFreq)
+        public NoteE(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteE).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteF : Note
     {
-        public NoteF(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteF).Name).BaseFreq)
+        public NoteF(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteF).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteFis : Note
     {
-        public NoteFis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteFis).Name).BaseFreq)
+        public NoteFis(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteFis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteG : Note
     {
-        public NoteG(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteG).Name).BaseFreq)
+        public NoteG(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteG).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteGis : Note
     {
-        public NoteGis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteGis).Name).BaseFreq)
+        public NoteGis(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteGis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteA : Note
     {
-        public NoteA(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteA).Name).BaseFreq)
+        public NoteA(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteA).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteAis : Note
     {
-        public NoteAis(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteAis).Name).BaseFreq)
+        public NoteAis(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteAis).Name).BaseFreq)
         {
             this.Length = 1;
         }
     }
     class NoteB : Note
     {
-        public NoteB(int number) : base(number, BaseFrequencies.GetBaseFreq.Find(x => x.Note == typeof(NoteB).Name).BaseFreq)
+        public NoteB(int number) : base(number, NoteDetector.GetBaseFreq.Find(x => x.Note == typeof(NoteB).Name).BaseFreq)
         {
             this.Length = 1;
         }
@@ -619,9 +721,17 @@ namespace NoteVisualizer
     #endregion
     interface INoiseDetector
     {
+        /// <summary>
+        /// determines whether the buffer contains valid sound or noise
+        /// </summary>
+        /// <param name="buffer"></param>
+        /// <returns></returns>
         bool IsNoise(Complex[] buffer);
         double CurrentAmplitude(Complex[] buffer);
     }
+    /// <summary>
+    /// Noise detector based on root median square
+    /// </summary>
     class RMSNoiseDetector : INoiseDetector
     {
         readonly double amplitudeThreshold;
@@ -656,6 +766,9 @@ namespace NoteVisualizer
             this.value = value;
         }
     }
+    /// <summary>
+    /// Reduces the "single note error"
+    /// </summary>
     interface IErrorCorrector
     {
         void Correct(MusicSample sample);
@@ -720,10 +833,16 @@ namespace NoteVisualizer
             return note3;
         }
     }
+    /// <summary>
+    /// determines the final length of a note
+    /// </summary>
     interface INoteLengthProcessor
     {
         void ProcessSample(MusicSample sample);
     }
+    /// <summary>
+    /// Valid lengths for a note
+    /// </summary>
     internal static class UniformNoteLengths
     { 
         internal static double[] value = { 4, 6, 8, 12, 16, 24, 32, 48, 64 };
@@ -779,12 +898,25 @@ namespace NoteVisualizer
     {
         const int HPSIterationsCount = 5;
         public static double Progress { get; private set; }
-        static int chunkSize {get; set;} = 8192 * 2 ; //used for FFT, change so the chunksize is always constant in terms of number of real numbers, not bytes
-                                                    //adjust chunksize accordint to metadata
-        static int sampleArraySize { get; set; } 
-        static private Complex[] GetComplexSamples(byte[] byteArray, int bitDepth, int channelsCount) //transforms bytes to doubles
+        public static int ChunkSize { get; private set; }
+        private static int sampleSize;                               
+        public static int SampleSize //size of one sample in bytes (according to metadata)
         {
-            Complex[] complexArray = new Complex[(chunkSize * 8 / (bitDepth * channelsCount)) + 1 ];
+            get 
+            {
+                return sampleSize;
+            }
+            set 
+            {
+                sampleSize = value;
+                ChunkSize = SampleSize * 8196;
+            }
+        }
+
+        private static int sampleArraySize { get; set; } 
+        private static Complex[] ToComplexSamples(byte[] byteArray, int bitDepth, int channelsCount) //transforms bytes to doubles
+        {
+            Complex[] complexArray = new Complex[(ChunkSize * 8 / (bitDepth * channelsCount)) + 1 ];
             int byteIndex = 0;
             switch (bitDepth)
             {
@@ -825,7 +957,7 @@ namespace NoteVisualizer
             }
             return (complexArray);
         }
-        static private Complex[] ExtendSamples(Complex[] samples)
+        private static Complex[] ExtendSamples(Complex[] samples)
         {
             Complex[] complexValues = new Complex[2 * samples.Length - 2];
             for (int i = 0; i < samples.Length; i++)
@@ -840,7 +972,7 @@ namespace NoteVisualizer
             return (complexValues);
         }
 
-        static MaxFreqBin GetMaxFreqBin(Complex[] arrayAfterFFT)
+        private static MaxFreqBin GetMaxFreqBin(Complex[] arrayAfterFFT)
         {
             MaxFreqBin max = new MaxFreqBin(0, (int.MinValue));
             for (int i = 0; i < arrayAfterFFT.Length / 2; i++)
@@ -852,10 +984,16 @@ namespace NoteVisualizer
             }
             return (max);
         }
-        static double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
+        private static double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
         {
             return (((double) maxAmplitudeIndex * metaData.sampleFreq /  samplesCount));
         }
+        /// <summary>
+        /// selects one channel from the dual channel sample
+        /// </summary>
+        /// <param name="dualChannel"></param>
+        /// <param name="isEven"></param>
+        /// <returns></returns>
         static private byte[] ExtractByteChannel(byte[] dualChannel, bool isEven)
         {
             byte[] singleChannel = new byte[dualChannel.Length / 2];
@@ -891,14 +1029,21 @@ namespace NoteVisualizer
             }
             return (singleChannel);
         }
-        static internal void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form) // ---> Main
+        /// <summary>
+        /// Main method for processing the whole music sample
+        /// </summary>
+        /// <param name="inputFilePath"></param>
+        /// <param name="outputFileName"></param>
+        /// <param name="form"></param>
+        static internal void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form)
         {
 
             #region processing header
             BinaryReader headerStream = new BinaryReader(File.Open(inputFilePath, FileMode.Open));
             ISoundReader soundReader = new WavSoundReader();
             ProcessedMetaData metaData = soundReader.ReadHeader(headerStream);
-            sampleArraySize = (8 * chunkSize / (metaData.channelsCount * metaData.bitDepth)) +1 ;
+            SampleSize = metaData.channelsCount * metaData.bitDepth / 8;
+            sampleArraySize = (ChunkSize / SampleSize) + 1;
             headerStream.Close();
             #endregion
 
@@ -913,19 +1058,18 @@ namespace NoteVisualizer
             
             IWindowFunction window = new HannWindowFunction();
 
-            byte[] byteValues = soundReader.ReadDataBuffer(dataStream, chunkSize + (metaData.channelsCount * metaData.bitDepth / 8));
+            byte[] byteValues = soundReader.ReadDataBuffer(dataStream, ChunkSize + SampleSize);
 
             MusicSample musicSample = new MusicSample(metaData, inputFilePath);
             musicSample.Notes = new List<Note>();
 
             StreamWriter writer = new StreamWriter("output.txt"); //temp
 
-            //noteWriter.StartWrite(writer2);
 
-            while (dataStream.Position < dataStream.Length - chunkSize)
+            while (dataStream.Position < dataStream.Length - ChunkSize)
             {
 
-                complexSamples = GetComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, true), metaData.bitDepth, metaData.channelsCount);
+                complexSamples = ToComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, true), metaData.bitDepth, metaData.channelsCount);
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
                 {
@@ -939,7 +1083,7 @@ namespace NoteVisualizer
                 {
                     extendedComplexSamples = ExtendSamples(complexSamples);
                     window.Windowify(extendedComplexSamples);
-                    extendedComplexSamples = extendedComplexSamples.MakeFFT(extendedComplexSamples.Length, 0, 1);
+                    extendedComplexSamples = extendedComplexSamples.MakeFFT();
                     extendedComplexSamples = extendedComplexSamples.MakeHPS(HPSIterationsCount);
                     //StreamWriter writer = new StreamWriter("output.txt");
                     MaxFreqBin maxFreqBin = GetMaxFreqBin(extendedComplexSamples);
@@ -964,7 +1108,7 @@ namespace NoteVisualizer
                 //writer.Close();
 
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
-                Progress = Math.Min(((double)dataStream.Position) / (dataStream.Length - chunkSize), 1);
+                Progress = Math.Min(((double)dataStream.Position) / (dataStream.Length - ChunkSize), 1);
                 form.SetProgressBar();
                 
             }
