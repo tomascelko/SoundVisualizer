@@ -24,9 +24,9 @@ namespace NoteVisualizer
         {
             InitializeComponent();
         }
-        public void SetProgressBar()
+        public void SetProgressBar(double value)
         {
-            progressBar.Value = (int)Math.Round(MainManager.Progress * 100);
+            progressBar.Value = (int)Math.Round(value * 100);
         }
         /// <summary>
         /// Event Handler for clicking the browse button which opens dialog
@@ -36,10 +36,20 @@ namespace NoteVisualizer
         private void browseButtonClick(object sender, EventArgs e)
         {
             var FD = new System.Windows.Forms.OpenFileDialog();
+            FD.Multiselect = true;
+            FD.Filter = "Sound files (*.wav)|*.wav";
             if (FD.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                inputSampleTextBox.Text = FD.FileName;
+                inputSampleTextBox.Text = String.Concat(FD.FileNames.Select(str => str + ';'));
             }
+        }
+        private int CalculateThreadCount(string inputFiles)
+        {
+            throw new NotImplementedException();
+        }
+        private Thread[] CreateThreads(int threadCount, string inputFiles)
+        {
+            throw new NotImplementedException();
         }
         public void Done()
         {
@@ -54,8 +64,9 @@ namespace NoteVisualizer
         {
             progressBar.Maximum = 100;
 
-            //NoteDetector.TransposeDown(2);
-            MainManager.ProcessSoundFile(inputSampleTextBox.Text, outputTextBox.Text, this);
+            NoteDetector.TransposeDown(2);
+
+            new MainProcessor().ProcessSoundFile(inputSampleTextBox.Text.Trim(';'), outputTextBox.Text, this);
         }
         private void viewResultClicked(object sender, EventArgs e)
         { 
@@ -91,7 +102,7 @@ namespace NoteVisualizer
         /// <param name="startingIndex">index where to start FFT - called from outside with 0</param>
         /// <param name="distance">determines how many indices we need to skip in original array to get to next valid element (in this call)</param>
         /// <returns>array of complex values after FFT</returns>
-        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance) 
+        public static Complex[] MakeFFT(this Complex[] input, int size, int startingIndex, int distance)
         {
             const int minSize = 256;
             if (size > 1)
@@ -103,15 +114,13 @@ namespace NoteVisualizer
 
                     Task task = new Task(() => { even = MakeFFT(input, size / 2, startingIndex, distance * 2); });
                     task.Start();
-
-                    odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);                  
+                    odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);
                     task.Wait();
                 }
                 else
                 {
                     even = MakeFFT(input, size / 2, startingIndex, distance * 2);
                     odd = MakeFFT(input, size / 2, startingIndex + distance, distance * 2);
-                    
                 }
                 Complex[] output = new Complex[even.Length + odd.Length];
                 double angleOfOmega = 2 * Math.PI / size;
@@ -140,34 +149,36 @@ namespace NoteVisualizer
         /// Wrapping method to hide needed recursion parameters and set their initial value
         /// </summary>
         /// <param name="input">array to transform</param>
-        /// <returns></returns>
+        /// <returns>transformed buffer</returns>
         public static Complex[] MakeFFT(this Complex[] input) => input.MakeFFT(input.Length, 0, 1);
         /// <summary>
         /// Calculates Harmonic product spectrum of buffer on input to reduce chance of "octava - error"
         /// </summary>
         /// <param name="input"></param>
         /// <param name="iterationsCount">HPS is usually computed iteratively to reduce "octava - error" even more</param>
-        /// <returns></returns>
+        /// <returns>transformed buffer</returns>
+
         public static Complex[] MakeHPS(this Complex[] input, int iterationsCount)
         {
             Complex[] output = new Complex[input.Length];
             for (int i = 0; i < input.Length; i++)
             {
-                output[i].realPart = /*Math.Abs(input[i].realPart);*/ Math.Pow(Math.Abs(input[i].realPart), 1.0/iterationsCount);
-                output[i].imaginaryPart =/* Math.Abs(input[i].imaginaryPart);*/ Math.Pow(Math.Abs(input[i].imaginaryPart), 1.0/iterationsCount);
+                output[i].realPart = Math.Pow(Math.Abs(input[i].realPart), 1.0 / iterationsCount);
+                output[i].imaginaryPart = Math.Pow(Math.Abs(input[i].imaginaryPart), 1.0 / iterationsCount);
             }
-            for (int  i = 1; i < iterationsCount; i++)
+            for (int i = 1; i < iterationsCount; i++)
             {
-                for (int j = 0; j < input.Length / (i + 1); j ++)
+                for (int j = 0; j < input.Length / (i + 1); j++)
                 {
-                    output[j].realPart *= /*Math.Abs(input[i * j].realPart);*/ Math.Pow(Math.Abs(input[i * j].realPart), 1.0/iterationsCount);
-                    output[j].imaginaryPart *= /*Math.Abs(input[i * j].imaginaryPart);*/Math.Pow(Math.Abs(input[i * j].imaginaryPart), 1.0/iterationsCount);
+                    output[j].realPart *= Math.Pow(Math.Abs(input[i * j].realPart), 1.0 / iterationsCount);
+                    output[j].imaginaryPart *= Math.Pow(Math.Abs(input[i * j].imaginaryPart), 1.0 / iterationsCount);
                 }
 
             }
             return (output);
         }
     }
+    public delegate double PropertyToTransform(double complexPart);
     interface ISoundReader
     {
         /// <summary>
@@ -403,7 +414,7 @@ namespace NoteVisualizer
         /// Must be called BEFORE noteDetector object is created
         /// </summary>
         /// <param name="count">number of Half-tones to transpose </param>
-        public static void TransposeDown(int count) //TOCheck
+        public static void TransposeDown(int count) 
         {
             if (count == 0)
                 return;
@@ -894,13 +905,13 @@ namespace NoteVisualizer
             }
         }
     }
-    static class MainManager
+    class MainProcessor
     {
         const int HPSIterationsCount = 5;
         public static double Progress { get; private set; }
-        public static int ChunkSize { get; private set; }
-        private static int sampleSize;                               
-        public static int SampleSize //size of one sample in bytes (according to metadata)
+        public int ChunkSize { get; private set; }
+        private int sampleSize;                               
+        private int SampleSize //size of one sample in bytes (according to metadata)
         {
             get 
             {
@@ -913,8 +924,8 @@ namespace NoteVisualizer
             }
         }
 
-        private static int sampleArraySize { get; set; } 
-        private static Complex[] ToComplexSamples(byte[] byteArray, int bitDepth, int channelsCount) //transforms bytes to doubles
+        private int sampleArraySize { get; set; } 
+        private Complex[] ToComplexSamples(byte[] byteArray, int bitDepth, int channelsCount) //transforms bytes to doubles
         {
             Complex[] complexArray = new Complex[(ChunkSize * 8 / (bitDepth * channelsCount)) + 1 ];
             int byteIndex = 0;
@@ -957,7 +968,7 @@ namespace NoteVisualizer
             }
             return (complexArray);
         }
-        private static Complex[] ExtendSamples(Complex[] samples)
+        private Complex[] ExtendSamples(Complex[] samples)
         {
             Complex[] complexValues = new Complex[2 * samples.Length - 2];
             for (int i = 0; i < samples.Length; i++)
@@ -994,7 +1005,7 @@ namespace NoteVisualizer
         /// <param name="dualChannel"></param>
         /// <param name="isEven"></param>
         /// <returns></returns>
-        static private byte[] ExtractByteChannel(byte[] dualChannel, bool isEven)
+        private byte[] ExtractByteChannel(byte[] dualChannel, bool isEven)
         {
             byte[] singleChannel = new byte[dualChannel.Length / 2];
             if (isEven)
@@ -1035,7 +1046,7 @@ namespace NoteVisualizer
         /// <param name="inputFilePath"></param>
         /// <param name="outputFileName"></param>
         /// <param name="form"></param>
-        static internal void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form)
+        public void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form)
         {
 
             #region processing header
@@ -1065,11 +1076,11 @@ namespace NoteVisualizer
 
             StreamWriter writer = new StreamWriter("output.txt"); //temp
 
-
+            //Thread t1 = new Thread(() => { }); //
             while (dataStream.Position < dataStream.Length - ChunkSize)
             {
 
-                complexSamples = ToComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, true), metaData.bitDepth, metaData.channelsCount);
+                complexSamples = ToComplexSamples(metaData.channelsCount == 1 ? byteValues : ExtractByteChannel(byteValues, isEven:true), metaData.bitDepth, metaData.channelsCount);
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
                 {
@@ -1103,13 +1114,13 @@ namespace NoteVisualizer
                         writer3.WriteLine("{0} ", extendedComplexSamples[i].imaginaryPart / extendedComplexSamples.Length);
                     }*/
                 }
-                writer.Flush();
+                //writer.Flush();
                 //writer2.Flush();
                 //writer.Close();
 
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
                 Progress = Math.Min(((double)dataStream.Position) / (dataStream.Length - ChunkSize), 1);
-                form.SetProgressBar();
+                form.SetProgressBar(Progress);
                 
             }
             IErrorCorrector corrector = new OverlapWindowCorrector();
