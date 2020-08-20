@@ -14,7 +14,7 @@ using System.Windows.Forms.Design;
 using System.Timers;
 
 [assembly : InternalsVisibleTo("UnitTestSoundVisualizer")]
-
+//TODO add more info about output and simple Loading animation
 namespace NoteVisualizer
 {
     /// <summary>
@@ -22,15 +22,18 @@ namespace NoteVisualizer
     /// </summary>
     public partial class SoundVisualizer : Form 
     {
+        //BackgroundWorker backgroundWorker;
         public SoundVisualizer()
         {
             InitializeComponent();
+            loadingLabel.Visible = false;
+            chooseTuningBox.SelectedItem = "C(0)";
+
+            
         }
+
+
         public Queue<string> filesToProcess { get; private set; }
-        public void SetProgressBar(double value)
-        {
-            //progressBar.Value = (int)Math.Round(value * 100);
-        }
         /// <summary>
         /// Event Handler for clicking the browse button which opens dialog
         /// </summary>
@@ -72,9 +75,19 @@ namespace NoteVisualizer
         }
         public void Done()
         {
-            MessageBox.Show("You can now view processed file by clicking \"View\"", "Successfully Done");
+            loadingLabel.Visible = false; 
+            MessageBox.Show("You can now view processed files", "Successfully Done");
         }
-
+        private void StartLoading()
+        {
+            loadingLabel.Visible = true;
+        }
+        private int GetNumTuning(string tuning)
+        {
+            var numberStartIndex = tuning.IndexOf('(');
+            var numberEndIndex = tuning.IndexOf(')');
+            return int.Parse(tuning.Substring(numberStartIndex + 1, numberEndIndex - numberStartIndex - 1));
+        }
         /// <summary>
         /// Starts processing of given text file selected in inputTextBox
         /// </summary>
@@ -83,10 +96,15 @@ namespace NoteVisualizer
         private void processButtonClicked(object sender, EventArgs e)
         {
 
+            StartLoading();
+            var tuningChosen = GetNumTuning(chooseTuningBox.SelectedItem.ToString());
+            if (tuningChosen > 0)
+                NoteDetector.TransposeUp(tuningChosen);
+            else
+                NoteDetector.TransposeDown(-tuningChosen);
 
-            NoteDetector.TransposeDown(2);
             var threadCount = CalculateThreadCount(inputSampleTextBox.Text);
-             
+
             if (threadCount == 1)
             {
                 new MainProcessor().ProcessSoundFile(inputSampleTextBox.Text.Trim(';'), inputSampleTextBox.Text.Trim(';').Substring(0, inputSampleTextBox.Text.Length - 4) + "_notes.ly", this);
