@@ -34,14 +34,7 @@
             this.inputLabel = new System.Windows.Forms.Label();
             this.browseButton = new System.Windows.Forms.Button();
             this.processButton = new System.Windows.Forms.Button();
-            this.progressBar = new System.Windows.Forms.ProgressBar();
-            this.outputGroupBox = new System.Windows.Forms.GroupBox();
-            this.dotPdfLabel = new System.Windows.Forms.Label();
-            this.outputTextBox = new System.Windows.Forms.TextBox();
-            this.outputLabel = new System.Windows.Forms.Label();
-            this.viewResultButton = new System.Windows.Forms.Button();
             this.inputGroupBox.SuspendLayout();
-            this.outputGroupBox.SuspendLayout();
             this.SuspendLayout();
             // 
             // inputSampleTextBox
@@ -94,7 +87,7 @@
             // 
             // processButton
             // 
-            this.processButton.Location = new System.Drawing.Point(12, 176);
+            this.processButton.Location = new System.Drawing.Point(12, 106);
             this.processButton.Name = "processButton";
             this.processButton.Size = new System.Drawing.Size(101, 54);
             this.processButton.TabIndex = 4;
@@ -102,77 +95,17 @@
             this.processButton.UseVisualStyleBackColor = true;
             this.processButton.Click += new System.EventHandler(this.processButtonClicked);
             // 
-            // progressBar
-            // 
-            this.progressBar.Location = new System.Drawing.Point(165, 193);
-            this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new System.Drawing.Size(337, 23);
-            this.progressBar.TabIndex = 5;
-            // 
-            // outputGroupBox
-            // 
-            this.outputGroupBox.Controls.Add(this.dotPdfLabel);
-            this.outputGroupBox.Controls.Add(this.outputTextBox);
-            this.outputGroupBox.Controls.Add(this.outputLabel);
-            this.outputGroupBox.Location = new System.Drawing.Point(12, 85);
-            this.outputGroupBox.Name = "outputGroupBox";
-            this.outputGroupBox.Size = new System.Drawing.Size(490, 80);
-            this.outputGroupBox.TabIndex = 6;
-            this.outputGroupBox.TabStop = false;
-            this.outputGroupBox.Text = "Output";
-            // 
-            // dotPdfLabel
-            // 
-            this.dotPdfLabel.AutoSize = true;
-            this.dotPdfLabel.Location = new System.Drawing.Point(312, 33);
-            this.dotPdfLabel.Name = "dotPdfLabel";
-            this.dotPdfLabel.Size = new System.Drawing.Size(28, 15);
-            this.dotPdfLabel.TabIndex = 3;
-            this.dotPdfLabel.Text = ".pdf";
-            // 
-            // outputTextBox
-            // 
-            this.outputTextBox.Location = new System.Drawing.Point(167, 25);
-            this.outputTextBox.Name = "outputTextBox";
-            this.outputTextBox.Size = new System.Drawing.Size(139, 23);
-            this.outputTextBox.TabIndex = 0;
-            this.outputTextBox.TextChanged += new System.EventHandler(this.textBox1_TextChanged);
-            // 
-            // outputLabel
-            // 
-            this.outputLabel.AutoSize = true;
-            this.outputLabel.Location = new System.Drawing.Point(6, 29);
-            this.outputLabel.Name = "outputLabel";
-            this.outputLabel.Size = new System.Drawing.Size(111, 15);
-            this.outputLabel.TabIndex = 2;
-            this.outputLabel.Text = "Insert output name:";
-            this.outputLabel.Click += new System.EventHandler(this.label1_Click);
-            // 
-            // viewResultButton
-            // 
-            this.viewResultButton.Location = new System.Drawing.Point(391, 240);
-            this.viewResultButton.Name = "viewResultButton";
-            this.viewResultButton.Size = new System.Drawing.Size(111, 43);
-            this.viewResultButton.TabIndex = 7;
-            this.viewResultButton.Text = "View Result";
-            this.viewResultButton.UseVisualStyleBackColor = true;
-            // 
             // SoundVisualizer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(833, 470);
-            this.Controls.Add(this.viewResultButton);
-            this.Controls.Add(this.outputGroupBox);
-            this.Controls.Add(this.progressBar);
             this.Controls.Add(this.processButton);
             this.Controls.Add(this.inputGroupBox);
             this.Name = "SoundVisualizer";
             this.Text = "SoundVisualizer";
             this.inputGroupBox.ResumeLayout(false);
             this.inputGroupBox.PerformLayout();
-            this.outputGroupBox.ResumeLayout(false);
-            this.outputGroupBox.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -185,12 +118,6 @@
         private System.Windows.Forms.Label inputLabel;
         private System.Windows.Forms.Button browseButton;
         private System.Windows.Forms.Button processButton;
-        private System.Windows.Forms.ProgressBar progressBar;
-        private System.Windows.Forms.GroupBox outputGroupBox;
-        private System.Windows.Forms.TextBox outputTextBox;
-        private System.Windows.Forms.Label outputLabel;
-        private System.Windows.Forms.Label dotPdfLabel;
-        private System.Windows.Forms.Button viewResultButton;
     }
 }
 

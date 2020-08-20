@@ -10,6 +10,8 @@ using System.IO;
 using System.Windows.Forms;
 using System.Threading;
 using System.Runtime.CompilerServices;
+using System.Windows.Forms.Design;
+using System.Timers;
 
 [assembly : InternalsVisibleTo("UnitTestSoundVisualizer")]
 
@@ -24,9 +26,10 @@ namespace NoteVisualizer
         {
             InitializeComponent();
         }
+        public Queue<string> filesToProcess { get; private set; }
         public void SetProgressBar(double value)
         {
-            progressBar.Value = (int)Math.Round(value * 100);
+            //progressBar.Value = (int)Math.Round(value * 100);
         }
         /// <summary>
         /// Event Handler for clicking the browse button which opens dialog
@@ -42,19 +45,36 @@ namespace NoteVisualizer
             {
                 inputSampleTextBox.Text = String.Concat(FD.FileNames.Select(str => str + ';'));
             }
+
         }
         private int CalculateThreadCount(string inputFiles)
         {
-            throw new NotImplementedException();
+            const int maxThreadCount = 4;
+            return Math.Min(inputFiles.Split(';', StringSplitOptions.RemoveEmptyEntries).Length, maxThreadCount);
         }
-        private Thread[] CreateThreads(int threadCount, string inputFiles)
+        private Thread[] CreateThreads(int threadCount)
         {
-            throw new NotImplementedException();
+            var threads = new Thread[threadCount - 1];
+            
+            for (int i = 0; i < threadCount - 1; i++)
+            {
+                threads[i] = new Thread(() => new MainProcessor().ProcessSoundFiles(this));  
+            }
+            return threads;  
+        }
+        private void FillQueue(string fileNames)
+        {
+            filesToProcess = new Queue<string>();
+            foreach (string fileName in fileNames.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                filesToProcess.Enqueue(fileName);
+            }
         }
         public void Done()
         {
             MessageBox.Show("You can now view processed file by clicking \"View\"", "Successfully Done");
         }
+
         /// <summary>
         /// Starts processing of given text file selected in inputTextBox
         /// </summary>
@@ -62,11 +82,25 @@ namespace NoteVisualizer
         /// <param name="e"></param>
         private void processButtonClicked(object sender, EventArgs e)
         {
-            progressBar.Maximum = 100;
+
 
             NoteDetector.TransposeDown(2);
+            var threadCount = CalculateThreadCount(inputSampleTextBox.Text);
+             
+            if (threadCount == 1)
+            {
+                new MainProcessor().ProcessSoundFile(inputSampleTextBox.Text.Trim(';'), inputSampleTextBox.Text.Trim(';').Substring(0, inputSampleTextBox.Text.Length - 4) + "_notes.ly", this);
+            }
+            else 
+            {
+                FillQueue(inputSampleTextBox.Text);
+                var sideThreads = CreateThreads(threadCount);
+                Array.ForEach(sideThreads, thread => thread.Start());
+                new MainProcessor().ProcessSoundFiles(this);
+                Array.ForEach(sideThreads, thread => thread.Join());
+            }
+            Done();
 
-            new MainProcessor().ProcessSoundFile(inputSampleTextBox.Text.Trim(';'), outputTextBox.Text, this);
         }
         private void viewResultClicked(object sender, EventArgs e)
         { 
@@ -278,7 +312,7 @@ namespace NoteVisualizer
     /// <summary>
     /// Holds all necessary data about the music sample for further processing
     /// </summary>
-    class ProcessedMetaData
+    struct ProcessedMetaData
     {
         public readonly int headerSize;
         public readonly int channelsCount;
@@ -464,7 +498,7 @@ namespace NoteVisualizer
             return (closestNote);
         }
     }
-    /// <summary>
+     /// <summary>
     /// Writes notes to the given file base on the output format
     /// </summary>
     interface INoteWriter
@@ -550,7 +584,7 @@ namespace NoteVisualizer
     class NoteBaseFrequencyPair
     {
         public string Note { get; set; }
-        public double BaseFreq;
+        public double BaseFreq { get; set; }
         public NoteBaseFrequencyPair(string Note, double BaseFreq)
         {
             this.Note = Note;
@@ -982,8 +1016,7 @@ namespace NoteVisualizer
             }
             return (complexValues);
         }
-
-        private static MaxFreqBin GetMaxFreqBin(Complex[] arrayAfterFFT)
+        private MaxFreqBin GetMaxFreqBin(Complex[] arrayAfterFFT)
         {
             MaxFreqBin max = new MaxFreqBin(0, (int.MinValue));
             for (int i = 0; i < arrayAfterFFT.Length / 2; i++)
@@ -995,7 +1028,7 @@ namespace NoteVisualizer
             }
             return (max);
         }
-        private static double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
+        private double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
         {
             return (((double) maxAmplitudeIndex * metaData.sampleFreq /  samplesCount));
         }
@@ -1040,6 +1073,19 @@ namespace NoteVisualizer
             }
             return (singleChannel);
         }
+        public void ProcessSoundFiles(SoundVisualizer form)
+        {
+            Monitor.Enter(form.filesToProcess);
+            while (form.filesToProcess.Count != 0)
+            {
+                var fileToProcess = form.filesToProcess.Peek();
+                form.filesToProcess.Dequeue();
+                ProcessSoundFile(fileToProcess, fileToProcess.Substring(0, fileToProcess.Length - 4) + "_notes.ly", form); //cutting away .wav and adding notes.ly
+                Monitor.Enter(form.filesToProcess);
+            }
+            Monitor.Exit(form.filesToProcess);
+
+        }
         /// <summary>
         /// Main method for processing the whole music sample
         /// </summary>
@@ -1048,7 +1094,8 @@ namespace NoteVisualizer
         /// <param name="form"></param>
         public void ProcessSoundFile(string inputFilePath, string outputFileName, SoundVisualizer form)
         {
-
+            if (form.filesToProcess != null)
+                Monitor.Exit(form.filesToProcess);
             #region processing header
             BinaryReader headerStream = new BinaryReader(File.Open(inputFilePath, FileMode.Open));
             ISoundReader soundReader = new WavSoundReader();
@@ -1074,9 +1121,8 @@ namespace NoteVisualizer
             MusicSample musicSample = new MusicSample(metaData, inputFilePath);
             musicSample.Notes = new List<Note>();
 
-            StreamWriter writer = new StreamWriter("output.txt"); //temp
+            //StreamWriter writer = new StreamWriter("output.txt"); //temp
 
-            //Thread t1 = new Thread(() => { }); //
             while (dataStream.Position < dataStream.Length - ChunkSize)
             {
 
@@ -1084,7 +1130,7 @@ namespace NoteVisualizer
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
                 {
-                    writer.WriteLine("Pause");
+                    //writer.WriteLine("Pause");
                     Note detectedNote = new Pause();
                     //noteWriter.WriteNote(detectedNote);
 
@@ -1102,7 +1148,7 @@ namespace NoteVisualizer
                     NoteDetector noteDetector = new NoteDetector();
                     Note detectedNote = noteDetector.GetClosestNote(maxFreq / 2);
 
-                    writer.WriteLine("{0} ; {1}", detectedNote.GetType().Name, detectedNote.number);
+                    //writer.WriteLine("{0} ; {1}", detectedNote.GetType().Name, detectedNote.number);
 
                     //noteWriter.WriteNote(detectedNote);
 
@@ -1119,8 +1165,7 @@ namespace NoteVisualizer
                 //writer.Close();
 
                 soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
-                Progress = Math.Min(((double)dataStream.Position) / (dataStream.Length - ChunkSize), 1);
-                form.SetProgressBar(Progress);
+
                 
             }
             IErrorCorrector corrector = new OverlapWindowCorrector();
@@ -1129,10 +1174,10 @@ namespace NoteVisualizer
             INoteLengthProcessor noteLengthProcessor = new DefaultNoteLengthProcessor();
             noteLengthProcessor.ProcessSample(musicSample);
 
-            StreamWriter writer2 = new StreamWriter(outputFileName + ".ly");
+            StreamWriter writer2 = new StreamWriter(outputFileName);
             INoteWriter noteWriter = new LillyPondNoteWriter();
             noteWriter.WriteAll(musicSample, writer2);
-            form.Done();
+            //form.Done();
             #endregion
         }
     }
