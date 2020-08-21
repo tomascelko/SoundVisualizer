@@ -22,20 +22,18 @@ namespace NoteVisualizer
     /// </summary>
     public partial class SoundVisualizer : Form 
     {
-        //BackgroundWorker backgroundWorker;
         public SoundVisualizer()
         {
             InitializeComponent();
             loadingLabel.Visible = false;
-            chooseTuningBox.SelectedItem = "C(0)";
+            chooseTuningBox.SelectedItem = "C(0)"; //set the default value
 
             
         }
-
-
         public Queue<string> filesToProcess { get; private set; }
+        #region event handlers
         /// <summary>
-        /// Event Handler for clicking the browse button which opens dialog
+        /// Event Handler for clicking the browse button which opens file dialog
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -50,46 +48,8 @@ namespace NoteVisualizer
             }
 
         }
-        private int CalculateThreadCount(string inputFiles)
-        {
-            const int maxThreadCount = 4;
-            return Math.Min(inputFiles.Split(';', StringSplitOptions.RemoveEmptyEntries).Length, maxThreadCount);
-        }
-        private Thread[] CreateThreads(int threadCount)
-        {
-            var threads = new Thread[threadCount - 1];
-            
-            for (int i = 0; i < threadCount - 1; i++)
-            {
-                threads[i] = new Thread(() => new MainProcessor().ProcessSoundFiles(this));  
-            }
-            return threads;  
-        }
-        private void FillQueue(string fileNames)
-        {
-            filesToProcess = new Queue<string>();
-            foreach (string fileName in fileNames.Split(';', StringSplitOptions.RemoveEmptyEntries))
-            {
-                filesToProcess.Enqueue(fileName);
-            }
-        }
-        public void Done()
-        {
-            loadingLabel.Visible = false; 
-            MessageBox.Show("You can now view processed files", "Successfully Done");
-        }
-        private void StartLoading()
-        {
-            loadingLabel.Visible = true;
-        }
-        private int GetNumTuning(string tuning)
-        {
-            var numberStartIndex = tuning.IndexOf('(');
-            var numberEndIndex = tuning.IndexOf(')');
-            return int.Parse(tuning.Substring(numberStartIndex + 1, numberEndIndex - numberStartIndex - 1));
-        }
         /// <summary>
-        /// Starts processing of given text file selected in inputTextBox
+        /// Starts processing of given text file(s) selected in inputTextBox
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -109,7 +69,7 @@ namespace NoteVisualizer
             {
                 new MainProcessor().ProcessSoundFile(inputSampleTextBox.Text.Trim(';'), inputSampleTextBox.Text.Trim(';').Substring(0, inputSampleTextBox.Text.Length - 4) + "_notes.ly", this);
             }
-            else 
+            else
             {
                 FillQueue(inputSampleTextBox.Text);
                 var sideThreads = CreateThreads(threadCount);
@@ -120,16 +80,54 @@ namespace NoteVisualizer
             Done();
 
         }
-        private void viewResultClicked(object sender, EventArgs e)
-        { 
+        #endregion
+        private int CalculateThreadCount(string inputFiles)
+        {
+            const int maxThreadCount = 4;
+            return Math.Min(inputFiles.Split(';', StringSplitOptions.RemoveEmptyEntries).Length, maxThreadCount);
+        }
+        private Thread[] CreateThreads(int threadCount)
+        {
+            var threads = new Thread[threadCount - 1];
+            
+            for (int i = 0; i < threadCount - 1; i++)
+            {
+                threads[i] = new Thread(() => new MainProcessor().ProcessSoundFiles(this));  
+            }
+            return threads;  
+        }
+        /// <summary>
+        /// Enqueues all files selected in textBox to the queue
+        /// </summary>
+        /// <param name="fileNames">users choice of fileNames separated by semicolon</param>
+        private void FillQueue(string fileNames)
+        {
+            filesToProcess = new Queue<string>();
+            foreach (string fileName in fileNames.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                filesToProcess.Enqueue(fileName);
+            }
+        }
+        public void Done()
+        {
+            loadingLabel.Visible = false; 
+            MessageBox.Show("You can now view processed files", "Successfully Done");
+        }
+        private void StartLoading()
+        {
+            loadingLabel.Visible = true;
+        }
+        /// <summary>
+        /// Parses tuning selected in textBox to find relative semi-tone distance of transposition
+        /// </summary>
+        /// <param name="tuning">user's choice of tuning</param>
+        private int GetNumTuning(string tuning)
+        {
+            var numberStartIndex = tuning.IndexOf('(');
+            var numberEndIndex = tuning.IndexOf(')');
+            return int.Parse(tuning.Substring(numberStartIndex + 1, numberEndIndex - numberStartIndex - 1));
+        }
         
-        }
-        private void label1_Click(object sender, EventArgs e)
-        {
-        }
-        private void textBox1_TextChanged(object sender, EventArgs e)
-        {
-        }
     }
     static class Extensions
     {
@@ -137,6 +135,7 @@ namespace NoteVisualizer
         {
             return (value * value);
         }
+        /// <returns>Closest value in the array to the given value</returns>
         public static double GetNearest(this double value, double[] array)
         {
             double[] tempArray = new double[array.Length];
@@ -230,7 +229,6 @@ namespace NoteVisualizer
             return (output);
         }
     }
-    public delegate double PropertyToTransform(double complexPart);
     interface ISoundReader
     {
         /// <summary>
@@ -242,9 +240,9 @@ namespace NoteVisualizer
         /// <summary>
         /// Serves as initial read from the file into the buffer
         /// </summary>
-        /// <param name="waveFile"></param>
+        /// <param name="waveFile">source from where you read</param>
         /// <param name="byteCount">number of bytes to read</param>
-        /// <returns></returns>
+        /// <returns>Metadata needed for further processing</returns>
 
         byte[] ReadDataBuffer(FileStream waveFile, int byteCount);
         /// <summary>
@@ -291,7 +289,6 @@ namespace NoteVisualizer
         public byte[] ReadDataBuffer(FileStream stream, int byteCount)
         {
 
-            // Store the audio data of the wave file to a byte array. 
             byte[] buffer = new byte[byteCount];
             stream.Read(buffer, 0, byteCount);
             return (buffer);
@@ -445,7 +442,6 @@ namespace NoteVisualizer
         }
         /// <summary>
         /// Changes GetBaseFreq to reflect tuning of different instruments
-        /// Must be called BEFORE noteDetector object is created
         /// </summary>
         /// <param name="count">number of Half-tones to transpose</param>
         public static void TransposeUp(int count)
@@ -462,10 +458,8 @@ namespace NoteVisualizer
             TransposeUp(count - 1);
         }
         /// <summary>
-        /// Changes GetBaseFreq to reflect tuning of different instruments
-        /// Must be called BEFORE noteDetector object is created
+        /// Analogical to TransposeUp method
         /// </summary>
-        /// <param name="count">number of Half-tones to transpose </param>
         public static void TransposeDown(int count) 
         {
             if (count == 0)
@@ -533,7 +527,7 @@ namespace NoteVisualizer
         int NotesOnLine { get; set; }
         const int MaxNotesOnLine = 30; 
         private TextWriter writer;
-        public void StartWrite(TextWriter writer /*possible arguments - predznamenanie*/)
+        public void StartWrite(TextWriter writer )
         {
             writer.WriteLine("{");
             this.writer = writer;
@@ -816,17 +810,17 @@ namespace NoteVisualizer
     }
     struct MaxFreqBin
     {
-        public int binNumber { get; private set; }
-        public double value { get; private set;  }
+        public int BinNumber { get; private set; }
+        public double Value { get; private set;  }
         public void Set(int binNumber, double value)
         {
-            this.binNumber = binNumber;
-            this.value = value;
+            this.BinNumber = binNumber;
+            this.Value = value;
         }
         public MaxFreqBin(int binNumber, double value)
         {
-            this.binNumber = binNumber;
-            this.value = value;
+            this.BinNumber = binNumber;
+            this.Value = value;
         }
     }
     /// <summary>
@@ -928,6 +922,10 @@ namespace NoteVisualizer
             AllignToNearestLength(); //returns result to newNotes variable -- reusing of existing List
             sample.Notes = newNotes;
         }
+        /// <summary>
+        /// Squeezes uninterupted section of shorter notes into one longer note
+        /// </summary>
+        /// <param name="notes"></param>
         private void SqueezeNotes(List<Note> notes)
         {
             for (int i = 0; i < notes.Count; i++)
@@ -957,6 +955,9 @@ namespace NoteVisualizer
             }
         }
     }
+    /// <summary>
+    ///  Main sample processing algorithm 
+    /// </summary>
     class MainProcessor
     {
         const int HPSIterationsCount = 5;
@@ -976,7 +977,8 @@ namespace NoteVisualizer
             }
         }
 
-        private int sampleArraySize { get; set; } 
+        private int sampleArraySize { get; set; }
+        #region buffer methods
         private Complex[] ToComplexSamples(byte[] byteArray, int bitDepth, int channelsCount) //transforms bytes to doubles
         {
             Complex[] complexArray = new Complex[(ChunkSize * 8 / (bitDepth * channelsCount)) + 1 ];
@@ -1039,23 +1041,19 @@ namespace NoteVisualizer
             MaxFreqBin max = new MaxFreqBin(0, (int.MinValue));
             for (int i = 0; i < arrayAfterFFT.Length / 2; i++)
             {
-                if (Math.Abs(arrayAfterFFT[i].realPart / arrayAfterFFT.Length) > max.value)
+                if (Math.Abs(arrayAfterFFT[i].realPart / arrayAfterFFT.Length) > max.Value)
                 {
                     max.Set(i, Math.Sqrt(arrayAfterFFT[i].realPart.Sqr() + arrayAfterFFT[i].imaginaryPart.Sqr()) / arrayAfterFFT.Length);
                 }
             }
             return (max);
         }
-        private double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
-        {
-            return (((double) maxAmplitudeIndex * metaData.sampleFreq /  samplesCount));
-        }
         /// <summary>
-        /// selects one channel from the dual channel sample
+        /// Extracts one channel from the dual channel sample
         /// </summary>
         /// <param name="dualChannel"></param>
         /// <param name="isEven"></param>
-        /// <returns></returns>
+        /// <returns>transformed buffer</returns>
         private byte[] ExtractByteChannel(byte[] dualChannel, bool isEven)
         {
             byte[] singleChannel = new byte[dualChannel.Length / 2];
@@ -1091,9 +1089,19 @@ namespace NoteVisualizer
             }
             return (singleChannel);
         }
+        #endregion
+        private double CalculateMaxFreq(int maxAmplitudeIndex, ProcessedMetaData metaData, int samplesCount)
+        {
+            return (((double) maxAmplitudeIndex * metaData.sampleFreq /  samplesCount));
+        }
+
+        /// <summary>
+        /// Manages threads taking files from the queue to process
+        /// </summary>
+        /// <param name="form"></param>
         public void ProcessSoundFiles(SoundVisualizer form)
         {
-            Monitor.Enter(form.filesToProcess);
+            Monitor.Enter(form.filesToProcess); //while condition check and .dequeue must be done 'atomically' - otherwise risk of race condition
             while (form.filesToProcess.Count != 0)
             {
                 var fileToProcess = form.filesToProcess.Peek();
@@ -1133,13 +1141,9 @@ namespace NoteVisualizer
             Complex[] extendedComplexSamples = new Complex[2 * sampleArraySize - 2];
             
             IWindowFunction window = new HannWindowFunction();
-
             byte[] byteValues = soundReader.ReadDataBuffer(dataStream, ChunkSize + SampleSize);
-
             MusicSample musicSample = new MusicSample(metaData, inputFilePath);
             musicSample.Notes = new List<Note>();
-
-            //StreamWriter writer = new StreamWriter("output.txt"); //temp
 
             while (dataStream.Position < dataStream.Length - ChunkSize)
             {
@@ -1148,43 +1152,21 @@ namespace NoteVisualizer
                 INoiseDetector noiseDetector = new RMSNoiseDetector(2 << (metaData.bitDepth - 1));
                 if (noiseDetector.IsNoise(complexSamples))
                 {
-                    //writer.WriteLine("Pause");
                     Note detectedNote = new Pause();
-                    //noteWriter.WriteNote(detectedNote);
-
                     musicSample.Notes.Add(detectedNote);
                 }
                 else
                 {
                     extendedComplexSamples = ExtendSamples(complexSamples);
                     window.Windowify(extendedComplexSamples);
-                    extendedComplexSamples = extendedComplexSamples.MakeFFT();
-                    extendedComplexSamples = extendedComplexSamples.MakeHPS(HPSIterationsCount);
-                    //StreamWriter writer = new StreamWriter("output.txt");
+                    extendedComplexSamples = extendedComplexSamples.MakeFFT().MakeHPS(HPSIterationsCount); 
                     MaxFreqBin maxFreqBin = GetMaxFreqBin(extendedComplexSamples);
-                    double maxFreq = CalculateMaxFreq(maxFreqBin.binNumber, metaData, sampleArraySize);
+                    double maxFreq = CalculateMaxFreq(maxFreqBin.BinNumber, metaData, sampleArraySize);
                     NoteDetector noteDetector = new NoteDetector();
                     Note detectedNote = noteDetector.GetClosestNote(maxFreq / 2);
-
-                    //writer.WriteLine("{0} ; {1}", detectedNote.GetType().Name, detectedNote.number);
-
-                    //noteWriter.WriteNote(detectedNote);
-
                     musicSample.Notes.Add(detectedNote);
-                    /*for (int i = 0; i < extendedComplexSamples.Length; i++)
-                    {
-                        writer3.Write("{0} ", i);
-                        writer3.Write("{0} ", extendedComplexSamples[i].realPart / extendedComplexSamples.Length);
-                        writer3.WriteLine("{0} ", extendedComplexSamples[i].imaginaryPart / extendedComplexSamples.Length);
-                    }*/
                 }
-                //writer.Flush();
-                //writer2.Flush();
-                //writer.Close();
-
-                soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);
-
-                
+                soundReader.MoveDataBuffer(dataStream, window.OverlapSize, byteValues);             
             }
             IErrorCorrector corrector = new OverlapWindowCorrector();
             corrector.Correct(musicSample);
@@ -1195,7 +1177,6 @@ namespace NoteVisualizer
             StreamWriter writer2 = new StreamWriter(outputFileName);
             INoteWriter noteWriter = new LillyPondNoteWriter();
             noteWriter.WriteAll(musicSample, writer2);
-            //form.Done();
             #endregion
         }
     }
