@@ -14,7 +14,12 @@ using System.Windows.Forms.Design;
 using System.Timers;
 
 [assembly : InternalsVisibleTo("UnitTestSoundVisualizer")]
-//TODO add more info about output and simple Loading animation
+
+/// <summary>
+/// Credit Programm for the C# and .NET I subject 2020
+/// Made by Tomas Celko
+/// MFF UK Prague
+/// </summary>
 namespace NoteVisualizer
 {
     /// <summary>
@@ -592,7 +597,6 @@ namespace NoteVisualizer
 
         }
     }
-    
     class NoteBaseFrequencyPair
     {
         public string Note { get; set; }
