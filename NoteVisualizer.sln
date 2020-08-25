@@ -5,7 +5,12 @@ VisualStudioVersion = 16.0.29503.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NoteVisualizer", "NoteVisualizer\NoteVisualizer.csproj", "{17222215-F92F-4506-9B00-0B8055432588}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTestSoundVisualizer", "UnitTestSoundVisualizer\UnitTestSoundVisualizer.csproj", "{5793AE9B-9E6A-4D5C-AE76-5D826BE2BB96}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UnitTestSoundVisualizer", "UnitTestSoundVisualizer\UnitTestSoundVisualizer.csproj", "{5793AE9B-9E6A-4D5C-AE76-5D826BE2BB96}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{697CDEB5-5A6F-4174-B348-F3363DF00EA9}"
+	ProjectSection(SolutionItems) = preProject
+		README.docx = README.docx
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
